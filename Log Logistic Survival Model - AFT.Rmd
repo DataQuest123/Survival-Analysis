@@ -1,0 +1,156 @@
+---
+title: "LOG LOGISTIC SURVIVAL MODEL - AFT"
+author: "Enock Bereka"
+date: "2025-08-25"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## The log-logistic survival model is a parametric survival model where survival times are assumed to follow a log-logistic distribution. It is commonly used in survival analysis when the hazard rate is non-monotonic (it first increases, reaches a peak, and then decreases).
+
+## Load required packages
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(flexsurv)
+library(survival)
+```
+
+## Load the data
+```{r warning=FALSE, message=FALSE}
+d <- read_csv("C:/Users/ADMIN/Desktop/Data Science/Datasets/survival/loglogistic_simulated_survival.csv")
+```
+
+## Recode categorical variables
+```{r warning=FALSE, message=FALSE}
+d$sex <- ifelse(d$sex == 1, "Male", "Female")
+d$sex <- factor(d$sex)
+d$treatment <- ifelse(d$treatment == 1, "drug", "placebo")
+d$treatment <- factor(d$treatment)
+```
+
+## Quick check
+```{r warning=FALSE, message=FALSE}
+glimpse(d)
+with(d, table(event))
+```
+
+## ---------------- AFT MODELS ----------------
+## AFT via flexsurv (log-logistic)
+```{r warning=FALSE, message=FALSE}
+aft_llogis <- flexsurvreg(Surv(time, event) ~ age + sex + treatment + biomarker,
+                          data = d, dist = "llogis")
+print(aft_llogis)
+```
+
+## Model Setup
+## Model: Log-logistic Accelerated Failure Time (AFT) model
+## Outcome: Survival time (Surv(time, event))
+## Predictors: age, sex, treatment, biomarker
+
+## Distribution Parameters
+## Shape = 1.526 (95% CI: 1.39 – 1.68)
+## Controls how “peaked” or “spread out” the survival curve is.
+## 1 means the hazard initially increases with time, peaks, then decreases.
+## Scale = 25.66 (95% CI: 12.48 – 52.77)
+## This is a baseline time parameter. Higher scale shifts survival curve to longer survival times.
+
+## Covariates (AFT interpretation)
+## In AFT models, coefficients represent the log acceleration factor.
+## exp(est) = acceleration factor (time ratio).
+## 1: longer survival (protective).
+## <1: shorter survival (risk factor).
+
+## Age: The estimated coefficient for age is -0.0156, with exp(β) = 0.985. This means that for each 1-year increase in age, survival time is expected to be about 1.5% shorter. The effect is small but statistically significant.
+## Sex (Male vs Female): The coefficient for males is 0.157, with exp(β) = 1.17. This suggests that males have about 17% longer survival compared to females. However, since the 95% confidence interval (0.94–1.46) includes 1, this effect is not statistically significant.
+## Treatment (Placebo vs Drug): The treatment coefficient is 0.329, with exp(β) = 1.389. Patients receiving placebo appear to have about 39% longer survival compared to those receiving the drug. The confidence interval (1.12–1.73) indicates that this effect is statistically significant.
+## Biomarker: The coefficient for the biomarker is 0.223, with exp(β) = 1.249. Each unit increase in the biomarker is associated with about 25% longer survival. The confidence interval (1.08–1.44) shows this is a statistically significant effect.
+
+## Model Fit
+## N = 600 (268 deaths, 332 censored).
+## Log-likelihood = -1119.2.
+## AIC = 2250.4 → useful for comparing with other models (e.g., Weibull, log-normal).
+
+## Key Takeaways
+## Older age → shorter survival.
+## Treatment effect is surprising: placebo patients lived longer than treated ones (maybe treatment is harmful, or sicker patients got treated).
+## Biomarker → strong positive predictor of survival.
+## Sex → not statistically significant.
+## Log-logistic fit: hazard is non-monotonic (rises, then falls), so it fits diseases/events where risk peaks then declines. 
+
+## AFT via survreg (parametric AFT; different parameterization)
+```{r warning=FALSE, message=FALSE}
+aft_llogis_sr <- survreg(Surv(time, event) ~ age + sex + treatment + biomarker,
+                         data = d, dist = "loglogistic")
+summary(aft_llogis_sr)
+```
+
+## Age (β = -0.0156, p = 0.006)
+## For every 1-year increase in age, survival time is multiplied by exp(-0.0156) ≈ 0.985.
+## This means older patients have ~1.5% shorter survival time per year of age. Effect is statistically significant.
+
+## Sex (Male vs Female; β = 0.157, p = 0.16)
+## Males have a time ratio of exp(0.157) ≈ 1.17.
+## This suggests that males live ~17% longer than females, but the result is not statistically significant (p > 0.05).
+
+## Treatment (Placebo vs Drug; β = 0.329, p = 0.0033)
+## Patients on placebo have a time ratio of exp(0.329) ≈ 1.39.
+## This means placebo patients survive ~39% longer than those on the drug, and this effect is statistically significant.
+
+## Biomarker (β = 0.223, p = 0.0024)
+## Each unit increase in biomarker is associated with a time ratio of exp(0.223) ≈ 1.25.
+## So, higher biomarker levels correspond to ~25% longer survival time, and the effect is significant.
+
+## Scale parameter (Scale = 0.655, log(scale) = -0.423, p < 2e-16)
+## This describes variability in survival times. A scale < 1 suggests that the hazard function rises quickly and then falls off (common with log-logistic).
+
+## Overall model fit
+## Likelihood ratio test: χ²(4) = 26.5, p < 0.0001 → The covariates collectively improve model fit compared to intercept-only.
+## Sample size: n = 600, so findings are reasonably powered.
+
+## In short:
+## Older age shortens survival.
+## Males tend to live longer, but not significantly.
+## Placebo group survives longer than drug group (significant).
+## Higher biomarker values predict longer survival (significant).
+
+## ---------------- Prediction ----------------
+## Create a representative dataset for predictions
+```{r warning=FALSE, message=FALSE}
+newdat_aft <- d %>%
+  group_by(treatment) %>%
+  summarize(
+    age = mean(age),
+    biomarker = median(biomarker),
+    sex = names(sort(table(sex), decreasing = TRUE))[1],
+    .groups = "drop"
+  ) %>%
+  mutate(sex = factor(sex, levels = levels(d$sex)))
+
+print(newdat_aft)
+```
+
+## Predict with flexsurv: survival estimates over a grid of times
+```{r warning=FALSE, message=FALSE}
+tgrid <- seq(0, quantile(d$time, 0.99), length.out = 200)
+
+aft_surv_list <- lapply(split(newdat_aft, newdat_aft$treatment), function(nd) {
+  s <- summary(aft_llogis, newdata = nd, type = "survival", t = tgrid)
+  data.frame(time = tgrid, surv = s[[1]]$est, treatment = nd$treatment)
+})
+
+aft_surv_df <- do.call(rbind, aft_surv_list)
+```
+
+## ---------------- Plot survival curves ----------------
+```{r warning=FALSE, message=FALSE}
+ggplot(aft_surv_df, aes(x = time, y = surv, linetype = treatment)) +
+  geom_step(size = 1.2) +
+  labs(title = "AFT (Log-logistic) — Predicted Survival by Treatment",
+       x = "Time", y = "Survival Probability") +
+  theme_minimal(base_size = 14) +
+  theme(legend.title = element_blank())
+```
+

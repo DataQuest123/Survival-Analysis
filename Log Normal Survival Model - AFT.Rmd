@@ -1,0 +1,124 @@
+---
+title: "LOG NORMAL SURVIVAL MODEL - AFT"
+author: "Enock Bereka"
+date: "2025-08-26"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load required packages
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(flexsurv)
+library(survival)
+```
+
+## Load the data
+```{r message=FALSE, warning=FALSE}
+dat <- read_csv("C:/Users/ADMIN/Desktop/Data Science/Datasets/survival/sim_lognormal_survival.csv")
+```
+
+## Quick check
+```{r message=FALSE, warning=FALSE}
+glimpse(dat)
+with(dat, table(status))
+```
+
+## Fit log-normal Accelerated Failure Time (AFT) model
+```{r message=FALSE, warning=FALSE}
+fit_aft <- survreg(Surv(time, status) ~ treatment + age + biomarker,
+                   data = dat, dist = "lognormal")
+```
+
+## Model summary (coefficients are on log(time) scale)
+```{r message=FALSE, warning=FALSE}
+summary(fit_aft)
+```
+
+## Extract time ratios (exp(coefficients))
+## Regression coefficients (only the covariates)
+```{r message=FALSE, warning=FALSE}
+est <- coef(fit_aft)
+```
+
+## Standard errors for just those coefficients
+```{r message=FALSE, warning=FALSE}
+se <- sqrt(diag(vcov(fit_aft)))[names(est)]
+```
+
+## Compute time ratios + 95% CI
+```{r message=FALSE, warning=FALSE}
+time_ratio <- exp(est)
+ci_low <- exp(est - 1.96 * se)
+ci_high <- exp(est + 1.96 * se)
+```
+
+## Put into a nice table
+```{r message=FALSE, warning=FALSE}
+results <- data.frame(
+  term = names(est),
+  coef = est,
+  se = se,
+  time_ratio = time_ratio,
+  CI_lower = ci_low,
+  CI_upper = ci_high,
+  row.names = NULL
+)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(flextable)
+flextable(results) %>% theme_box()
+```
+
+## Coefficients
+## (Intercept) = 2.476 (p < 0.001)
+## Baseline log(survival time) when treatment = control, age = 0, biomarker = 0.
+## (Not usually directly interpretable since age=0 isn’t realistic, but necessary for model structure.)
+
+## treatmenttreated = 0.493 (p < 0.001)
+## On the log-time scale.
+## Exponentiate: exp(0.493) ≈ 1.64.
+## Treated patients live ~64% longer than controls, all else equal.
+
+## age = -0.019 (p < 0.001)
+## Each additional year of age reduces log-time by 0.019.
+## Exponentiate: exp(-0.019) ≈ 0.981.
+## Every extra year of age shortens survival time by about 2%.
+
+## biomarker = -0.302 (p < 0.001)
+## Each 1-unit increase in the biomarker decreases log-time by 0.302.
+## Exponentiate: exp(-0.302) ≈ 0.74.
+## Higher biomarker values are associated with 26% shorter survival times.
+
+## Scale parameter
+## Log(scale) = -0.518 → Scale = 0.596
+## This is the standard deviation of the log-survival times (σ in the log-normal).
+## Smaller values = less variability around the regression prediction.
+
+## Model fit statistics
+## Loglik(model) = -612.5 vs intercept-only = -687.5
+## Likelihood Ratio Test: χ² = 150, df = 3, p ≈ 2.6e-32
+## Strong evidence that covariates (treatment, age, biomarker) significantly improve prediction of survival.
+## n = 500 observations were used.
+
+## Plain language summary
+## The treatment effect is large and highly significant: treated patients live about 1.6× longer than controls.
+## Older age is associated with shorter survival (about 2% reduction per year).
+## High biomarker values are strongly predictive of poorer survival (about 26% reduction per unit increase).
+## The model explains survival well (p-value < 0.0001).
+
+
+## predicted median survival for a patient
+```{r message=FALSE, warning=FALSE}
+new_patient <- data.frame(treatment = "treated", age = 60, biomarker = 0)
+predicted_logmed <- predict(fit_aft, newdata = new_patient, type = "quantile", p = 0.5)
+predicted_median <- exp(predicted_logmed)
+
+cat("Predicted median survival (treated, age=60, biomarker=0):",
+    round(predicted_median, 2), "\n")
+```
+
