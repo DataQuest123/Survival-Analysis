@@ -135,13 +135,3 @@ Parametric models assume a specific distribution for survival times — useful f
 - **Document assumptions** and report uncertainty (CI for survival/median estimates).
 
 ---
-
-## Mini case study — customer churn (how to present)
-**Problem:** predict time to subscription cancellation and identify customer segments needing retention.  
-**Process:**  
-- KM curves show median retention = 9 months for free plan vs 18 months premium.  
-- Cox PH: churn hazard for monthly subscribers HR=1.6 (95% CI 1.4–1.8), after adjusting for usage.  
-- Weibull AFT: premium plan — time ratio = 1.8 → premium customers expected to last 80% longer.  
-**Actionable outputs:** targeted offers to high hazard segments within months 2–4; forecast revenue at cohort level; schedule retention campaigns timed by predicted risk spikes.
-
----
